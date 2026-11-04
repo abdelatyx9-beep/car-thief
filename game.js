@@ -299,9 +299,15 @@ const gltfLoader = new GLTFLoader();
 function loadHuman(id) {
   if (!humLoading[id]) humLoading[id] = new Promise((res) => gltfLoader.load("models/people/" + id + ".glb", (g) => {
     g.scene.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; for (const m of [].concat(o.material)) { m.envMapIntensity = 0.7; if (m.map) m.map.anisotropy = 4; } } });
-    HUM[id] = g; if (id === ANIM_ID) CLIPS = g.animations; res(g);
+    HUM[id] = g; if (id === ANIM_ID) CLIPS = standClips(g.animations); res(g);
   }, undefined, () => res(null)));
   return humLoading[id];
+}
+// a natural standing pose: the walk cycle frozen where the feet pass each other (arms hang relaxed at the sides)
+function standClips(list) {
+  const walk = list.find((c) => c.name === "Walk"); if (!walk) return list;
+  const tracks = walk.tracks.map((t) => { const n = t.getValueSize(), v0 = Array.from(t.values.slice(0, n)); return new t.constructor(t.name, [0, 2], v0.concat(v0)); });
+  return list.filter((c) => c.name !== "Idle").concat([new THREE.AnimationClip("Idle", 2, tracks)]);
 }
 const loadedOf = (ids) => ids.filter((i) => HUM[i]);
 const pickId = (ids) => { const l = loadedOf(ids); return l.length ? l[Math.floor(R() * l.length)] : null; };
@@ -361,13 +367,15 @@ const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v1 = new THRE
 function rotWorld(bone, qW) { bone.parent.getWorldQuaternion(_q2); _q1.copy(_q2).invert().multiply(qW).multiply(_q2); bone.quaternion.premultiply(_q1); bone.updateMatrixWorld(true); }
 function aimBone(bone, tip, dir) { bone.getWorldPosition(_v1); tip.getWorldPosition(_v2); _v2.sub(_v1).normalize(); _q1.setFromUnitVectors(_v2, dir); rotWorld(bone, _q1.clone()); }
 function bones(v) { if (v.B) return v.B; const B = {}; v.root.traverse((o) => { if (o.isBone) { const m = o.name.match(/(Left|Right)(Arm|ForeArm|Hand)$/); if (m) B[m[1][0] + m[2]] = o; if (/Spine2$/.test(o.name)) B.spine = o; } }); return (v.B = B); }
-let ARMOUT = -0.2;
+let ARMOUT = 0, ARMFWD = 0;
 function poseArms(v, aim, aimDir) {
   const B = bones(v); if (!B.LArm || !B.RArm) return;
   v.g.updateMatrixWorld(true);
   const a = v.g.rotation.y, fwd = _ax.set(Math.sin(a), 0, Math.cos(a));
   if (!aim) { // hang the arms a little away from the body so they never sink into wide clothes
-    for (const [k, s] of [["LArm", 1], ["RArm", -1]]) { _q1.setFromAxisAngle(fwd, s * ARMOUT); rotWorld(B[k], _q1.clone()); }
+    const side = _v3.set(fwd.z, 0, -fwd.x);
+    if (v.cur === "Idle" && B.spine) { _q1.setFromAxisAngle(side, Math.sin(performance.now() / 700 + (v.phase || 0)) * 0.018); rotWorld(B.spine, _q1.clone()); }
+    if (ARMOUT || ARMFWD) for (const [k, s] of [["LArm", 1], ["RArm", -1]]) { _q1.setFromAxisAngle(fwd, s * ARMOUT); rotWorld(B[k], _q1.clone()); _q1.setFromAxisAngle(side, ARMFWD); rotWorld(B[k], _q1.clone()); }
     return;
   }
   // straighten the elbows, point the gun arm at the target, the other hand on the grip
@@ -897,7 +905,11 @@ function moveCar(c, dt) {
   // cars bump each other
   for (const o of cars) { if (o === c) continue; const dx = o.x - c.x, dz = o.z - c.z, d = Math.hypot(dx, dz), m = (c.T.len + o.T.len) * 0.36; if (d > 0.01 && d < m) { const nx = dx / d, nz = dz / d, pen = (m - d) / 2; c.x -= nx * pen; c.z -= nz * pen; o.x += nx * pen; o.z += nz * pen; const rel = (c.vx - o.vx) * nx + (c.vz - o.vz) * nz; if (rel > 0) { c.vx -= rel * nx * 0.6; c.vz -= rel * nz * 0.6; o.vx += rel * nx * 0.6; o.vz += rel * nz * 0.6; if (rel > 6) { c.hp -= (rel - 6) * 0.8; o.hp -= (rel - 6) * 0.8; if (c === player.car || o === player.car) { sfx.crash(clamp(rel / 15, 0.2, 1)); if (o.type === "police" || c.type === "police") addWanted(wanted.stars < 1 ? 1 : 0); } } if (o.ai && o.ai.kind === "traffic" && (c === player.car)) o.ai.wait = 3; } } }
   // run people over
-  if (sp > 4) for (const p of [...peds, ...cops]) { if (p.dead) continue; const d = Math.hypot(p.x - c.x, p.z - c.z); if (d < 1.6) { hurtPed(p, sp * 5); p.x += c.vx * 0.1; p.z += c.vz * 0.1; if (c === player.car) sfx.crash(0.3); } else if (d < 9 && p.kind === "ped" && c === player.car) p.panic = Math.max(p.panic, 2); }
+  // running people over: anyone inside the car's footprint is hit; fast enough and they die (police too)
+  if (sp > 3) { const fx2 = Math.sin(c.a), fz2 = Math.cos(c.a), hl = c.T.len / 2 + 0.35, hw = c.T.wid / 2 + 0.35;
+    for (const p of [...peds, ...cops]) { if (p.dead) continue; const ox = p.x - c.x, oz = p.z - c.z, lz = ox * fx2 + oz * fz2, lx = ox * fz2 - oz * fx2;
+      if (Math.abs(lz) < hl && Math.abs(lx) < hw) { hurtPed(p, sp > 7 ? 999 : sp * 8); p.x += c.vx * 0.12 + (lx >= 0 ? fz2 : -fz2) * 0.8; p.z += c.vz * 0.12 - (lx >= 0 ? fx2 : -fx2) * 0.8; if (c === player.car) { sfx.crash(0.35); c.vx *= 0.94; c.vz *= 0.94; } }
+      else if (c === player.car && p.kind === "ped" && Math.hypot(ox, oz) < 10) p.panic = Math.max(p.panic, 2); } }
   // wrecked: the engine catches fire and burns for a while before it blows up
   if (c.hp <= 0 && !c.burning && !c.dead) { c.burning = true; c.burnT = 10; if (c === player.car) { toast("🔥 السيارة تحترق!", "انزل منها قبل ما تنفجر"); } }
 }
@@ -1068,9 +1080,9 @@ function updateCamera(dt) {
     camAim = lerp(camAim, player.aimT > 0 ? 1 : 0, 1 - Math.exp(-dt * 8));
     // walking forward slowly turns the camera behind you
     if (lookIdle > 1.4 && player.speed > 1 && player.fwdPush > 0.6 && player.aimT <= 0) camYaw += angDiff(camYaw, player.a) * Math.min(1, dt * 1.3);
-    const sh = 0.45 + camAim * 0.2;
+    const sh = 0.6 + camAim * 0.35;
     tx = player.x - Math.cos(camYaw) * sh; ty = player.y + 1.62; tz = player.z + Math.sin(camYaw) * sh;
-    dist = (4.2 - camAim * 1.6) * SET.camDist; pitch = camPitch; lookAhead = 2.2; lookDown = -0.12;
+    dist = (3.4 - camAim * 1.3) * SET.camDist; pitch = camPitch * (1 - camAim * 0.5); lookAhead = 2.2; lookDown = -0.12;
   }
   camLastYaw = camYaw;
   const yaw = camYaw, cp = Math.cos(pitch), sp2 = Math.sin(pitch);
@@ -1315,4 +1327,4 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__g = { setArm: (x) => (ARMOUT = x), shootNow: () => { player.fireT = 0; shoot(); }, look: (x, z) => { camYaw = Math.atan2(x - px(), z - pz()); }, cops, renderer, scene, camera, THREE, HUM, makePerson, player, cars, peds, wanted, MISSIONS, startMission, SAVE, PLACES, frontOf, get mission() { return mission; }, enterCar, addWanted };
+window.__g = { setArm: (x) => (ARMOUT = x), setFwd: (x) => (ARMFWD = x), shootNow: () => { player.fireT = 0; shoot(); }, look: (x, z) => { camYaw = Math.atan2(x - px(), z - pz()); }, cops, renderer, scene, camera, THREE, HUM, makePerson, player, cars, peds, wanted, MISSIONS, startMission, SAVE, PLACES, frontOf, get mission() { return mission; }, enterCar, addWanted };
