@@ -151,6 +151,7 @@ body.driving #fireBtn { width: 78px; height: 78px; font-size: 16px; }
     <button class="btn" id="playBtn" type="button">ابدأ اللعب ▶</button>
     <div class="row"><button class="btn ghost" id="missBtn" type="button">المهمات</button></div>
     <div class="row"><button class="btn ghost" id="setBtn2" type="button" style="font-size:14px;padding:10px 14px">الإعدادات ⚙️</button><button class="btn ghost" id="creditsBtn" type="button" style="font-size:14px;padding:10px 14px">الحقوق</button></div>
+    <div class="keys" style="opacity:.6">الإصدار 7</div>
     <div class="keys" id="keys">الكمبيوتر: WASD للحركة، الماوس للنظر، كليك نار، F سرقة/نزول، Space قفز/فرامل يد، Q تغيير السلاح، M المهمات</div>
   </div>
 </div>
@@ -195,12 +196,13 @@ body.driving #fireBtn { width: 78px; height: 78px; font-size: 16px; }
     <div class="setrow" id="tiltRow"><span>عكس اتجاه الإمالة</span><div class="seg" id="sTiltInv"><button data-v="0">لا</button><button data-v="1">نعم</button></div></div>
     <div class="setrow"><span>جودة الرسم</span><div class="seg" id="sQ"><button data-v="low">خفيفة</button><button data-v="med">متوسطة</button><button data-v="high">عالية</button></div></div>
     <div class="setrow"><span>عكس الكاميرا فوق/تحت</span><div class="seg" id="sInv"><button data-v="0">لا</button><button data-v="1">نعم</button></div></div>
+    <div class="setrow"><span>الإصدار <b id="verTxt" style="color:#ffb21e">7</b></span><button class="btn ghost" id="updBtn" type="button" style="font-size:14px;padding:8px 14px">حدّث اللعبة 🔄</button></div>
     <button class="btn" id="setDone" type="button">تمام</button>
   </div>
 </div>
 <div class="fade" id="fade"></div>
 <div class="rot">لف الجوال بالعرض 📱↔️</div>
-<script type="module" src="game.js"></script>
+<script type="module" src="game.js?v=7"></script>
 <script>if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js");</script>
 </body>
 </html>

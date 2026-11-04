@@ -1269,6 +1269,8 @@ $("sSteer").addEventListener("input", (e) => { SET.steer = +e.target.value; save
 for (const [id, fn] of [["sDist", (v) => (SET.camDist = +v)], ["sQ", (v) => { SET.quality = v; applyQuality(); }], ["sInv", (v) => (SET.invY = v === "1")], ["sDrive", (v) => { SET.drive = v; SET.pedals = v !== "stick"; applyDriveMode(); $("tiltRow").hidden = v !== "tilt"; if (v === "tilt") askTilt(); }], ["sTiltInv", (v) => (SET.tiltInv = v === "1")]])
   $(id).addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; fn(b.dataset.v); saveSet(); [...$(id).children].forEach((x) => x.classList.toggle("on", x === b)); });
 $("setBtn").addEventListener("click", openSettings); $("setBtn2").addEventListener("click", openSettings);
+// force the newest version: drop every cached file and reload
+$("updBtn").addEventListener("click", async () => { $("updBtn").textContent = "جاري التحديث…"; try { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); const rs = await navigator.serviceWorker?.getRegistrations?.(); if (rs) await Promise.all(rs.map((r) => r.unregister())); } catch (e) {} location.replace(location.pathname + "?v=" + Date.now()); });
 $("setDone").addEventListener("click", () => { $("settings").hidden = true; if (mode === "pause") mode = "play"; });
 applyQuality();
 $("creditsBtn").addEventListener("click", () => { $("credits").hidden = false; }); $("creditsDone").addEventListener("click", () => { $("credits").hidden = true; });
