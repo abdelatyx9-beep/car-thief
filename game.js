@@ -336,13 +336,17 @@ function makeHuman(id, gunKind) {
   return v;
 }
 function disposeHuman(v) { scene.remove(v.g); for (const k in v.guns) scene.remove(v.guns[k]); v.mixer.stopAllAction(); }
+// blending done by hand: weights glide toward the wanted clip and always add up to 1,
+// so quick changes between standing and walking can never fall back to the rest (T) pose
 function setAct(v, name, rate) {
   if (!v.acts[name]) name = "Idle";
   const a = v.acts[name]; a.timeScale = rate || 1;
-  if (v.cur === name) return;
-  const from = v.acts[v.cur]; a.enabled = true; a.setEffectiveWeight(1);
-  if (from) { const loco = /Walk|Run|Strafe/; if (loco.test(v.cur) && loco.test(name)) a.time = (from.time / from.getClip().duration) * a.getClip().duration; a.crossFadeFrom(from, 0.22, false); }
-  v.cur = name;
+  if (v.cur !== name) { const from = v.acts[v.cur], loco = /Walk|Run|Strafe/; if (from && loco.test(v.cur) && loco.test(name) && v.w && !(v.w[name] > 0.05)) a.time = (from.time / from.getClip().duration) * a.getClip().duration; v.cur = name; }
+}
+function blendActs(v, dt) {
+  const w = v.w || (v.w = {}), k = 1 - Math.exp(-dt * 9); let sum = 0;
+  for (const n in v.acts) { const t = n === v.cur ? 1 : 0; w[n] = (w[n] == null ? t : w[n]) + (t - (w[n] == null ? t : w[n])) * k; if (w[n] < 0.002) w[n] = 0; sum += w[n]; }
+  for (const n in v.acts) { const act = v.acts[n]; act.enabled = true; if (!act.isRunning()) act.play(); act.setEffectiveWeight(sum > 0 ? w[n] / sum : (n === v.cur ? 1 : 0)); }
 }
 function animHuman(v, st, dt) {
   const d = Math.abs(v.g.position.x - camera.position.x) + Math.abs(v.g.position.z - camera.position.z);
@@ -351,14 +355,15 @@ function animHuman(v, st, dt) {
   if (st.dead) {
     if (v.fall == null) { v.fall = 0; setAct(v, "Idle", 0.2); }
     v.fall = Math.min(1, v.fall + dt * 2.2); v.root.rotation.x = -Math.PI / 2 * v.fall * v.fall; v.root.position.y = 0.12 * v.fall;
-    v.mixer.update(dt); hideGuns(v); return;
+    blendActs(v, dt); v.mixer.update(dt); hideGuns(v); return;
   }
   const sp = st.speed || 0, aim = st.aiming && v.armed;
-  if (sp < 0.35) setAct(v, "Idle", 1);
-  else if (sp < 4.4 && !st.panic) setAct(v, aim && st.strafe ? "Strafe" : "Walk", clamp(sp / 1.45, 0.6, 1.9));
+  const moving = v.cur === "Idle" ? sp > 0.6 : sp > 0.3, running = v.cur === "Run" ? sp > 3.8 : sp > 4.6;
+  if (!moving) setAct(v, "Idle", 1);
+  else if (!running && !st.panic) setAct(v, aim && st.strafe ? "Strafe" : "Walk", clamp(sp / 1.45, 0.6, 1.9));
   else setAct(v, "Run", clamp(sp / 6.2, 0.75, 1.35));
   v.acc = (v.acc || 0) + dt; const step = far ? 1 / 12 : 0;
-  if (v.acc >= step) { v.mixer.update(v.acc); v.acc = 0; }
+  if (v.acc >= step) { blendActs(v, v.acc); v.mixer.update(v.acc); v.acc = 0; }
   if (!far || aim) poseArms(v, aim, st.aimDir || _gf.set(Math.sin(v.g.rotation.y), 0, Math.cos(v.g.rotation.y)));
   placeGun(v, aim, st.aimDir);
 }
