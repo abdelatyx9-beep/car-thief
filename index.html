@@ -89,11 +89,20 @@ body:not(.touch) #joy, body:not(.touch) #look, body:not(.touch) .ctl.tch { displ
 .oitem.wait { opacity: .5; }
 .credits { font-size: 12px; color: var(--dim); line-height: 1.8; text-align: right; }
 .credits b { color: #fff; }
-#setBtn { position: absolute; pointer-events: auto; top: calc(170px + env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 112px); width: 48px; height: 48px; border-radius: 12px; font-size: 22px; }
+#setBtn { position: absolute; pointer-events: auto; top: calc(170px + env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 56px); width: 48px; height: 48px; border-radius: 12px; font-size: 22px; }
 .pedal { display: none; border-radius: 18px; }
 #gasBtn { right: max(26px, env(safe-area-inset-right, 0px)); bottom: calc(150px + env(safe-area-inset-bottom, 0px)); width: 92px; height: 110px; font-size: 18px; background: rgba(40,170,80,.55); border-color: #8affb0; }
 #brakeBtn { right: calc(max(26px, env(safe-area-inset-right, 0px)) + 108px); bottom: calc(150px + env(safe-area-inset-bottom, 0px)); width: 80px; height: 80px; font-size: 15px; background: rgba(200,60,40,.5); border-color: #ffb0a0; }
 body.touch.driving .pedal { display: grid; }
+.steer { display: none !important; }
+body.touch.driving.dm-buttons .steer.sb, body.touch.driving.dm-wheel .steer.sw, body.touch.driving.dm-tilt .steer.st { display: grid !important; }
+body.touch.driving.dm-buttons #joy, body.touch.driving.dm-wheel #joy, body.touch.driving.dm-tilt #joy, body.touch.driving.dm-buttons #joyZone, body.touch.driving.dm-wheel #joyZone, body.touch.driving.dm-tilt #joyZone { display: none; }
+#steerL, #steerR { bottom: calc(26px + env(safe-area-inset-bottom, 0px)); width: 104px; height: 104px; font-size: 38px; border-radius: 26px; }
+#steerL { left: max(18px, env(safe-area-inset-left, 0px)); } #steerR { left: calc(max(18px, env(safe-area-inset-left, 0px)) + 122px); }
+#wheel { position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: 190px; height: 190px; pointer-events: auto; touch-action: none; border-radius: 50%; background: rgba(15,18,26,.35); }
+#wheel svg { width: 100%; height: 100%; display: block; }
+.tilthint { position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); bottom: calc(30px + env(safe-area-inset-bottom, 0px)); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font-size: 13px; place-items: center; }
+@media (max-height: 430px) { #steerL, #steerR { width: 88px; height: 88px; } #steerR { left: calc(max(18px, env(safe-area-inset-left, 0px)) + 104px); } #wheel { width: 160px; height: 160px; } }
 body.driving #jumpBtn, body.driving #wepBtn { display: none; }
 body.driving #fireBtn { width: 78px; height: 78px; font-size: 16px; }
 .setrow { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; text-align: right; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--line); font-weight: 700; font-size: 14px; }
@@ -108,7 +117,6 @@ body.driving #fireBtn { width: 78px; height: 78px; font-size: 16px; }
   <div class="hurt" id="hurt"></div>
   <div class="tl"><canvas id="mini" width="300" height="300"></canvas></div>
   <button class="ctl" id="menuBtn" type="button" aria-label="القائمة">☰</button>
-  <button class="ctl" id="wardBtn" type="button" aria-label="الملابس">👕</button>
   <div class="speedo" id="speedo" hidden><b id="spdN">0</b><small>كم/س</small><i id="gearN">N</i></div>
   <div class="tr">
     <div class="money" id="money">$0</div>
@@ -127,6 +135,10 @@ body.driving #fireBtn { width: 78px; height: 78px; font-size: 16px; }
   <button class="ctl tch" id="actBtn" type="button" hidden>سرقة</button>
   <button class="ctl tch" id="jumpBtn" type="button">قفز</button>
   <button class="ctl tch" id="wepBtn" type="button">سلاح</button>
+  <button class="ctl tch steer sb" id="steerL" type="button">◀</button>
+  <button class="ctl tch steer sb" id="steerR" type="button">▶</button>
+  <div class="steer sw" id="wheel"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="9"/><circle cx="50" cy="50" r="11" fill="rgba(255,255,255,.85)"/><path d="M8 52 L39 52 M61 52 L92 52 M50 61 L50 92" stroke="rgba(255,255,255,.85)" stroke-width="8" stroke-linecap="round"/><circle cx="50" cy="9" r="5" fill="#ffb21e"/></svg></div>
+  <div class="steer st tilthint" id="tiltHint">📱 ميّل الجوال يمين ويسار</div>
   <button class="ctl tch pedal" id="gasBtn" type="button">بنزين</button>
   <button class="ctl tch pedal" id="brakeBtn" type="button">فرامل</button>
   <button class="ctl" id="setBtn" type="button" aria-label="الإعدادات">⚙️</button>
@@ -137,7 +149,7 @@ body.driving #fireBtn { width: 78px; height: 78px; font-size: 16px; }
     <div class="logo">سارق<br>السيارات</div>
     <div class="sub">مدينة مفتوحة كاملة: اسرق السيارات، اهرب من الشرطة، وخلّص مهمات الزعيم</div>
     <button class="btn" id="playBtn" type="button">ابدأ اللعب ▶</button>
-    <div class="row"><button class="btn ghost" id="missBtn" type="button">المهمات</button><button class="btn ghost" id="outfitBtn" type="button">الملابس 👕</button></div>
+    <div class="row"><button class="btn ghost" id="missBtn" type="button">المهمات</button></div>
     <div class="row"><button class="btn ghost" id="setBtn2" type="button" style="font-size:14px;padding:10px 14px">الإعدادات ⚙️</button><button class="btn ghost" id="creditsBtn" type="button" style="font-size:14px;padding:10px 14px">الحقوق</button></div>
     <div class="keys" id="keys">الكمبيوتر: WASD للحركة، الماوس للنظر، كليك نار، F سرقة/نزول، Space قفز/فرامل يد، Q تغيير السلاح، M المهمات</div>
   </div>
@@ -147,7 +159,7 @@ body.driving #fireBtn { width: 78px; height: 78px; font-size: 16px; }
     <div class="logo" style="font-size:30px">المهمات</div>
     <div class="sub">روح لعلامة <b style="color:#ffb21e">M</b> الصفراء على الخريطة عشان تبدأ المهمة</div>
     <div class="mlist" id="mlist"></div>
-    <div class="row"><button class="btn" id="resumeBtn" type="button">كمّل اللعب</button><button class="btn ghost" id="soundBtn" type="button">الصوت: شغّال</button><button class="btn ghost" id="outfitBtn2" type="button">الملابس 👕</button></div>
+    <div class="row"><button class="btn" id="resumeBtn" type="button">كمّل اللعب</button><button class="btn ghost" id="soundBtn" type="button">الصوت: شغّال</button></div>
   </div>
 </div>
 <div class="screen" id="outfits" hidden>
@@ -178,7 +190,9 @@ body.driving #fireBtn { width: 78px; height: 78px; font-size: 16px; }
     <div class="setrow"><span>سرعة لف الكاميرا</span><input type="range" id="sSens" min="0.4" max="2" step="0.1"></div>
     <div class="setrow"><span>بُعد الكاميرا</span><div class="seg" id="sDist"><button data-v="0.8">قريب</button><button data-v="1">وسط</button><button data-v="1.25">بعيد</button></div></div>
     <div class="setrow"><span>حساسية الدركسون</span><input type="range" id="sSteer" min="0.5" max="1.6" step="0.1"></div>
-    <div class="setrow"><span>السواقة في الجوال</span><div class="seg" id="sPedal"><button data-v="1">أزرار بنزين وفرامل</button><button data-v="0">العصا</button></div></div>
+    <div class="setrow"><span>الملابس</span><button class="btn ghost" id="setOutfit" type="button" style="font-size:14px;padding:8px 14px">اختار لبسك 👕</button></div>
+    <div class="setrow"><span>تحكم السيارة في الجوال</span><div class="seg" id="sDrive"><button data-v="buttons">أسهم</button><button data-v="wheel">دركسون</button><button data-v="tilt">إمالة الجوال</button><button data-v="stick">العصا</button></div></div>
+    <div class="setrow" id="tiltRow"><span>عكس اتجاه الإمالة</span><div class="seg" id="sTiltInv"><button data-v="0">لا</button><button data-v="1">نعم</button></div></div>
     <div class="setrow"><span>جودة الرسم</span><div class="seg" id="sQ"><button data-v="low">خفيفة</button><button data-v="med">متوسطة</button><button data-v="high">عالية</button></div></div>
     <div class="setrow"><span>عكس الكاميرا فوق/تحت</span><div class="seg" id="sInv"><button data-v="0">لا</button><button data-v="1">نعم</button></div></div>
     <button class="btn" id="setDone" type="button">تمام</button>

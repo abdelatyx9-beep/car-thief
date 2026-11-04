@@ -13,7 +13,10 @@ document.body.classList.toggle("touch", IS_TOUCH);
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
 const SAVE = Object.assign({ money: 0, done: 0, sound: true, outfit: "Male_Adult_19" }, store.get("cthief.save", {}));
 const save = () => store.set("cthief.save", SAVE);
-const SET = Object.assign({ vol: 0.8, sens: 1, camDist: 1, quality: matchMedia("(pointer: coarse)").matches ? "med" : "high", invY: false, steer: 1, pedals: true }, store.get("cthief.set", {}));
+const SET = Object.assign({ vol: 0.8, sens: 1, camDist: 1, quality: matchMedia("(pointer: coarse)").matches ? "med" : "high", invY: false, steer: 1, pedals: true, drive: "buttons", tiltInv: false }, store.get("cthief.set", {}));
+if (!["buttons", "wheel", "tilt", "stick"].includes(SET.drive)) SET.drive = "buttons";
+function applyDriveMode() { document.body.classList.remove("dm-buttons", "dm-wheel", "dm-tilt", "dm-stick"); document.body.classList.add("dm-" + SET.drive); }
+applyDriveMode();
 const saveSet = () => store.set("cthief.set", SET);
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const R = rng(20261104);
@@ -345,22 +348,41 @@ function animHuman(v, st, dt) {
     v.mixer.update(dt); hideGuns(v); return;
   }
   const sp = st.speed || 0, aim = st.aiming && v.armed;
-  if (sp < 0.35) setAct(v, aim ? "RifleIdle" : "Idle", 1);
-  else if (sp < 4.4 && !st.panic) setAct(v, aim ? (st.strafe ? "Strafe" : "RifleWalk") : "Walk", clamp(sp / (aim ? 1.7 : 1.45), 0.6, 1.9));
+  if (sp < 0.35) setAct(v, "Idle", 1);
+  else if (sp < 4.4 && !st.panic) setAct(v, aim && st.strafe ? "Strafe" : "Walk", clamp(sp / 1.45, 0.6, 1.9));
   else setAct(v, "Run", clamp(sp / 6.2, 0.75, 1.35));
   v.acc = (v.acc || 0) + dt; const step = far ? 1 / 12 : 0;
   if (v.acc >= step) { v.mixer.update(v.acc); v.acc = 0; }
-  placeGun(v, aim);
+  if (!far || aim) poseArms(v, aim, st.aimDir || _gf.set(Math.sin(v.g.rotation.y), 0, Math.cos(v.g.rotation.y)));
+  placeGun(v, aim, st.aimDir);
 }
 const _ga = new THREE.Vector3(), _gb = new THREE.Vector3(), _gf = new THREE.Vector3();
+const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _ax = new THREE.Vector3();
+function rotWorld(bone, qW) { bone.parent.getWorldQuaternion(_q2); _q1.copy(_q2).invert().multiply(qW).multiply(_q2); bone.quaternion.premultiply(_q1); bone.updateMatrixWorld(true); }
+function aimBone(bone, tip, dir) { bone.getWorldPosition(_v1); tip.getWorldPosition(_v2); _v2.sub(_v1).normalize(); _q1.setFromUnitVectors(_v2, dir); rotWorld(bone, _q1.clone()); }
+function bones(v) { if (v.B) return v.B; const B = {}; v.root.traverse((o) => { if (o.isBone) { const m = o.name.match(/(Left|Right)(Arm|ForeArm|Hand)$/); if (m) B[m[1][0] + m[2]] = o; if (/Spine2$/.test(o.name)) B.spine = o; } }); return (v.B = B); }
+let ARMOUT = -0.2;
+function poseArms(v, aim, aimDir) {
+  const B = bones(v); if (!B.LArm || !B.RArm) return;
+  v.g.updateMatrixWorld(true);
+  const a = v.g.rotation.y, fwd = _ax.set(Math.sin(a), 0, Math.cos(a));
+  if (!aim) { // hang the arms a little away from the body so they never sink into wide clothes
+    for (const [k, s] of [["LArm", 1], ["RArm", -1]]) { _q1.setFromAxisAngle(fwd, s * ARMOUT); rotWorld(B[k], _q1.clone()); }
+    return;
+  }
+  // straighten the elbows, point the gun arm at the target, the other hand on the grip
+  const dir = aimDir.clone().normalize();
+  aimBone(B.RArm, B.RHand, dir); aimBone(B.RForeArm, B.RHand, dir);
+  B.RHand.getWorldPosition(_v3); const toGrip = _v3.clone().addScaledVector(dir, -0.05); B.LArm.getWorldPosition(_v1);
+  const ld = toGrip.sub(_v1).normalize(); aimBone(B.LArm, B.LHand, ld); aimBone(B.LForeArm, B.LHand, ld);
+}
 function hideGuns(v) { for (const k in v.guns) v.guns[k].visible = false; }
-function placeGun(v, aim) {
+function placeGun(v, aim, aimDir) {
   hideGuns(v); if (!v.armed || !v.gunKind || !v.rh || !v.g.visible || v.far && !aim) return;
   const gun = v.gunOf(v.gunKind); gun.visible = true;
   v.g.updateMatrixWorld(true); v.rh.getWorldPosition(_ga); v.lh.getWorldPosition(_gb);
   gun.position.copy(_ga); const d = _ga.distanceTo(_gb), a = v.g.rotation.y;
-  if (aim && d > 0.1 && d < 0.65 && v.gunKind !== "pistol") gun.lookAt(_gb);
-  else if (aim) { _gf.set(_ga.x + Math.sin(a), _ga.y, _ga.z + Math.cos(a)); gun.lookAt(_gf); }
+  if (aim) { const ad = aimDir || _v3.set(Math.sin(a), 0, Math.cos(a)); _gf.copy(_ga).add(ad); gun.lookAt(_gf); }
   else { _gf.set(_ga.x + Math.sin(a) * 0.35, _ga.y - 0.9, _ga.z + Math.cos(a) * 0.35); gun.lookAt(_gf); } // held low at the side
 }
 
@@ -606,7 +628,11 @@ function spawnGang(n) {
 }
 
 // ---------------- input ----------------
-const pedal = { gas: false, brake: false };
+const pedal = { gas: false, brake: false, left: false, right: false, wheel: 0, wheelHeld: false, tilt: 0, btnSteer: 0 };
+// phone tilt: gravity along the screen's long side
+let tiltOk = false;
+function askTilt() { try { if (window.DeviceMotionEvent && DeviceMotionEvent.requestPermission) DeviceMotionEvent.requestPermission().then((r) => (tiltOk = r === "granted")).catch(() => {}); else tiltOk = true; } catch (e) {} }
+addEventListener("devicemotion", (e) => { const g = e.accelerationIncludingGravity; if (!g || g.y == null) return; tiltOk = true; const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0; const v = ang === 90 ? g.y : ang === 270 || ang === -90 ? -g.y : g.x; pedal.tilt = clamp(v / 5.5, -1, 1) * (SET.tiltInv ? -1 : 1); });
 const keys = {}; let camYaw = 0, camPitch = 0.32, firing = false, joy = { x: 0, y: 0 }, jumpQ = false, actQ = false;
 addEventListener("keydown", (e) => { const k = e.key.toLowerCase(); keys[k] = true; if (k === "f" || k === "e") actQ = true; if (k === " ") jumpQ = true; if (k === "q") cycleWeapon(); if (k === "m") openMissions(); if (k === "escape") openMissions(); });
 addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
@@ -632,6 +658,15 @@ addEventListener("mousemove", (e) => { if (document.pointerLockElement === canva
   hold("jumpBtn", () => { jumpQ = true; keys[" "] = true; }, () => (keys[" "] = false));
   hold("wepBtn", () => cycleWeapon());
   hold("gasBtn", () => (pedal.gas = true), () => (pedal.gas = false));
+  hold("steerL", () => (pedal.left = true), () => (pedal.left = false));
+  hold("steerR", () => (pedal.right = true), () => (pedal.right = false));
+  // steering wheel: turn it with your thumb, it springs back when you let go
+  const Wh = $("wheel"); let wid = null, wa0 = 0, wv0 = 0;
+  const ang = (e) => { const r = Wh.getBoundingClientRect(); return Math.atan2(e.clientX - (r.left + r.width / 2), -(e.clientY - (r.top + r.height / 2))); };
+  Wh.addEventListener("pointerdown", (e) => { wid = e.pointerId; Wh.setPointerCapture(e.pointerId); wa0 = ang(e); wv0 = pedal.wheel; });
+  Wh.addEventListener("pointermove", (e) => { if (e.pointerId !== wid) return; pedal.wheel = clamp(wv0 + angDiff(wa0, ang(e)), -2.2, 2.2); });
+  const wend = (e) => { if (e.pointerId === wid) { wid = null; pedal.wheelHeld = false; } }; Wh.addEventListener("pointerup", wend); Wh.addEventListener("pointercancel", wend);
+  Wh.addEventListener("pointerdown", () => (pedal.wheelHeld = true));
   hold("brakeBtn", () => (pedal.brake = true), () => (pedal.brake = false));
   $("menuBtn").addEventListener("click", openMissions);
 })();
@@ -778,7 +813,7 @@ const GRAV = 22;
 function updatePlayer(dt) {
   if (player.dead) return;
   player.fireT = Math.max(0, player.fireT - dt); player.aimT = Math.max(0, player.aimT - dt);
-  if (firing || keys["mouse"]) shoot();
+  if (firing || keys["mouse"]) { player.aimT = Math.max(player.aimT, 0.8); shoot(); }
   if (player.car) { driveCar(player.car, dt, playerCarInput()); if (actQ) exitCar(); actQ = false; return; }
   // walk relative to the camera
   let mx = (keys["d"] || keys["arrowright"] ? 1 : 0) - (keys["a"] || keys["arrowleft"] ? 1 : 0) + joy.x, mz = (keys["w"] || keys["arrowup"] ? 1 : 0) - (keys["s"] || keys["arrowdown"] ? 1 : 0) - joy.y;
@@ -793,7 +828,7 @@ function updatePlayer(dt) {
   collide(player, 0.45);
   // face where you walk, or where you shoot
   const ta = player.aimT > 0 ? camYaw : player.speed > 0.3 ? Math.atan2(vx, vz) : player.a;
-  player.a += angDiff(player.a, ta) * Math.min(1, dt * 12);
+  player.a += angDiff(player.a, ta) * Math.min(1, dt * (player.aimT > 0 ? 22 : 12));
   if (jumpQ && player.onGround) { player.vy = 7.5; player.onGround = false; }
   jumpQ = false;
   player.vy -= GRAV * dt; player.y += player.vy * dt; const floor = onPavement(player.x, player.z) ? 0.2 : 0; if (player.y <= floor) { player.y = floor; player.vy = 0; player.onGround = true; }
@@ -816,20 +851,26 @@ function enterCar(c) {
   c.driver = "player"; c.ai = null; player.car = c; player.v.g.visible = false; document.body.classList.add("driving"); lookIdle = 9; $("actBtn").textContent = "انزل"; tone(300, 0.08, "square", 0.04);
   camYaw = c.a;
 }
-function exitCar() {
-  const c = player.car; if (!c) return; if (Math.hypot(c.vx, c.vz) > 8) return; // too fast to jump out
+function exitCar(force) {
+  const c = player.car; if (!c) return; if (!force && Math.hypot(c.vx, c.vz) > 8) return; // too fast to jump out
   player.car = null; c.driver = null; player.x = c.x + Math.cos(c.a) * 1.9; player.z = c.z - Math.sin(c.a) * 1.9; player.y = 0.2; collide(player, 0.45);
-  player.v.g.visible = true; engineSound(false, 0); camYaw = c.a; document.body.classList.remove("driving"); pedal.gas = pedal.brake = false;
+  player.v.g.visible = true; engineSound(false, 0); camYaw = c.a; document.body.classList.remove("driving"); pedal.gas = pedal.brake = pedal.left = pedal.right = false; pedal.wheel = 0;
 }
 function playerCarInput() {
   let thr = (keys["w"] || keys["arrowup"] ? 1 : 0) - (keys["s"] || keys["arrowdown"] ? 1 : 0);
   const jx = Math.abs(joy.x) < 0.12 ? 0 : (joy.x - Math.sign(joy.x) * 0.12) / 0.88;
   let steer = (keys["a"] || keys["arrowleft"] ? 1 : 0) - (keys["d"] || keys["arrowright"] ? 1 : 0) - jx * Math.abs(jx) * SET.steer;
-  if (IS_TOUCH) { if (SET.pedals) thr += (pedal.gas ? 1 : 0) - (pedal.brake ? 1 : 0); else thr -= joy.y; }
+  if (IS_TOUCH) {
+    if (SET.drive === "stick") thr -= joy.y; else thr += (pedal.gas ? 1 : 0) - (pedal.brake ? 1 : 0);
+    if (SET.drive === "buttons") { const want = (pedal.left ? 1 : 0) - (pedal.right ? 1 : 0); pedal.btnSteer = lerp(pedal.btnSteer, want, 0.18); steer = pedal.btnSteer * SET.steer; }
+    else if (SET.drive === "wheel") steer = clamp(-pedal.wheel / 1.6, -1, 1) * SET.steer;
+    else if (SET.drive === "tilt") { const t = Math.abs(pedal.tilt) < 0.06 ? 0 : pedal.tilt; steer = clamp(-t * 1.25, -1, 1) * SET.steer; }
+  }
   return { thr: clamp(thr, -1, 1), steer: clamp(steer, -1, 1), hb: !!keys[" "] };
 }
 function driveCar(c, dt, inp) {
   if (c.dead) { c.vx *= 0.95; c.vz *= 0.95; return; }
+  if (c.burning) inp = { thr: inp.thr * 0.5, steer: inp.steer, hb: inp.hb };
   const T = c.T, fx = Math.sin(c.a), fz = Math.cos(c.a);
   let vf = c.vx * fx + c.vz * fz, vl = c.vx * fz - c.vz * fx;
   if (inp.thr > 0) vf += T.acc * inp.thr * dt * (vf < 0 ? 2.5 : 1) * clamp(1 - vf / T.max, 0, 1);
@@ -852,12 +893,13 @@ function moveCar(c, dt) {
   const fx = Math.sin(c.a), fz = Math.cos(c.a), off = c.T.len / 2 - c.T.wid / 2, r = c.T.wid / 2 + 0.05;
   let hit = false;
   for (const s of [1, -1]) { const o = { x: c.x + fx * off * s, z: c.z + fz * off * s }, ox = o.x, oz = o.z, n = collide(o, r); if (n) { c.x += o.x - ox; c.z += o.z - oz; const vn = c.vx * n.x + c.vz * n.z; if (vn < 0) { c.vx -= 1.4 * vn * n.x; c.vz -= 1.4 * vn * n.z; hit = Math.max(hit || 0, -vn); } } }
-  if (hit > 4) { c.hp -= (hit - 4) * 3; if (c === player.car) { sfx.crash(clamp(hit / 15, 0.2, 1)); shake = Math.min(1, hit / 14); } c.vx *= 0.7; c.vz *= 0.7; }
+  if (hit > 6) { c.hp -= (hit - 6) * 1.3; if (c === player.car) { sfx.crash(clamp(hit / 15, 0.2, 1)); shake = Math.min(1, hit / 14); } c.vx *= 0.7; c.vz *= 0.7; }
   // cars bump each other
-  for (const o of cars) { if (o === c) continue; const dx = o.x - c.x, dz = o.z - c.z, d = Math.hypot(dx, dz), m = (c.T.len + o.T.len) * 0.36; if (d > 0.01 && d < m) { const nx = dx / d, nz = dz / d, pen = (m - d) / 2; c.x -= nx * pen; c.z -= nz * pen; o.x += nx * pen; o.z += nz * pen; const rel = (c.vx - o.vx) * nx + (c.vz - o.vz) * nz; if (rel > 0) { c.vx -= rel * nx * 0.6; c.vz -= rel * nz * 0.6; o.vx += rel * nx * 0.6; o.vz += rel * nz * 0.6; if (rel > 5) { c.hp -= rel; o.hp -= rel; if (c === player.car || o === player.car) { sfx.crash(clamp(rel / 15, 0.2, 1)); if (o.type === "police" || c.type === "police") addWanted(wanted.stars < 1 ? 1 : 0); } } if (o.ai && o.ai.kind === "traffic" && (c === player.car)) o.ai.wait = 3; } } }
+  for (const o of cars) { if (o === c) continue; const dx = o.x - c.x, dz = o.z - c.z, d = Math.hypot(dx, dz), m = (c.T.len + o.T.len) * 0.36; if (d > 0.01 && d < m) { const nx = dx / d, nz = dz / d, pen = (m - d) / 2; c.x -= nx * pen; c.z -= nz * pen; o.x += nx * pen; o.z += nz * pen; const rel = (c.vx - o.vx) * nx + (c.vz - o.vz) * nz; if (rel > 0) { c.vx -= rel * nx * 0.6; c.vz -= rel * nz * 0.6; o.vx += rel * nx * 0.6; o.vz += rel * nz * 0.6; if (rel > 6) { c.hp -= (rel - 6) * 0.8; o.hp -= (rel - 6) * 0.8; if (c === player.car || o === player.car) { sfx.crash(clamp(rel / 15, 0.2, 1)); if (o.type === "police" || c.type === "police") addWanted(wanted.stars < 1 ? 1 : 0); } } if (o.ai && o.ai.kind === "traffic" && (c === player.car)) o.ai.wait = 3; } } }
   // run people over
   if (sp > 4) for (const p of [...peds, ...cops]) { if (p.dead) continue; const d = Math.hypot(p.x - c.x, p.z - c.z); if (d < 1.6) { hurtPed(p, sp * 5); p.x += c.vx * 0.1; p.z += c.vz * 0.1; if (c === player.car) sfx.crash(0.3); } else if (d < 9 && p.kind === "ped" && c === player.car) p.panic = Math.max(p.panic, 2); }
-  if (c.hp <= 0 && !c.dead) { c.dead = true; c.burnT = 4; burnCar(c); }
+  // wrecked: the engine catches fire and burns for a while before it blows up
+  if (c.hp <= 0 && !c.burning && !c.dead) { c.burning = true; c.burnT = 10; if (c === player.car) { toast("🔥 السيارة تحترق!", "انزل منها قبل ما تنفجر"); } }
 }
 const BURNT = new THREE.MeshStandardMaterial({ color: 0x1a1816, roughness: 1 });
 function burnCar(c) { c.mesh.g.traverse((o) => { if (o.isMesh && !(c.mesh.lights || []).includes(o)) o.material = BURNT; }); }
@@ -980,7 +1022,7 @@ function updateCops(dt) {
     }
     // an officer right next to you arrests you
     if (d < 1.9 && !player.dead && (!player.car || Math.hypot(player.car.vx, player.car.vz) < 2)) { k.cuff = (k.cuff || 0) + dt; if (k.cuff > 1.3) { k.cuff = 0; die("انقبض عليك!", PLACES.police, "مركز الشرطة"); } } else k.cuff = 0;
-    animPerson(k.v, { speed: sp, aiming: shooter && d < 38 }, dt);
+    animPerson(k.v, { speed: sp, aiming: shooter && d < 38, aimDir: new THREE.Vector3(tx - k.x, 0.1, tz - k.z).normalize() }, dt);
   }
 }
 function updateGang(p, dt) {
@@ -992,7 +1034,7 @@ function updateGang(p, dt) {
     p.shootT = 1.1 + R() * 0.9; const from = new THREE.Vector3(p.x, 1.5, p.z), to = new THREE.Vector3(tx + (R() - 0.5) * 1.5, 1.2, tz + (R() - 0.5) * 1.5);
     tracer(from, to); sfx.shot(clamp(1 - d / 60, 0.2, 0.8), 0); if (R() < 0.4) { if (player.car) player.car.hp -= 5; else hurtPlayer(6); }
   }
-  animPerson(p.v, { speed: moving, aiming: true }, dt);
+  animPerson(p.v, { speed: moving, aiming: d < 50, aimDir: new THREE.Vector3(tx - p.x, 0.1, tz - p.z).normalize() }, dt);
 }
 function updateWanted(dt) {
   if (wanted.stars <= 0) { sirenSound(0); return; }
@@ -1057,9 +1099,12 @@ function syncAll(dt) {
     const vf = c.vx * Math.sin(c.a) + c.vz * Math.cos(c.a);
     for (let i = 0; i < c.mesh.wheels.length; i++) { const w = c.mesh.wheels[i]; w.rotation.order = "YXZ"; w.rotation.x = c.spin; if (i < 2) w.rotation.y = c.steer * 0.45; }
     c.mesh.body.rotation.z = lerp(c.mesh.body.rotation.z, -c.steer * clamp(vf / 25, -1, 1) * 0.05, 0.2);
-    if (c.dead && c.burnT > 0) { c.burnT -= dt; if (R() < dt * 12) puff(c.x + (R() - 0.5), 1.4, c.z + (R() - 0.5), R() < 0.5 ? 0xff7a1e : 0x2a2622, 0.7, 0.9); if (c.burnT <= 0) { explode(c.x, c.z); if (c === player.car) { exitCar(); hurtPlayer(60); } } }
+    { const hx = c.x + Math.sin(c.a) * c.T.len * 0.32, hz = c.z + Math.cos(c.a) * c.T.len * 0.32, near = Math.abs(c.x - camera.position.x) + Math.abs(c.z - camera.position.z) < 120;
+      if (!c.dead && !c.burning && c.hp < c.T.hp * 0.4 && near && R() < dt * (c.hp < c.T.hp * 0.2 ? 10 : 4)) puff(hx + (R() - 0.5) * 0.6, 1.2, hz + (R() - 0.5) * 0.6, c.hp < c.T.hp * 0.2 ? 0x2e2b28 : 0x9a9690, 0.45, 1.4); // smoke from the bonnet
+      if (c.burning) { c.burnT -= dt; if (near && R() < dt * 16) puff(hx + (R() - 0.5), 1.1 + R() * 0.4, hz + (R() - 0.5), R() < 0.6 ? 0xff7a1e : 0x2a2622, 0.6, 0.8);
+        if (c.burnT <= 0) { c.burning = false; c.dead = true; burnCar(c); explode(c.x, c.z); if (c === player.car) { exitCar(true); hurtPlayer(60); } } } }
   }
-  const pv = player.v; if (pv && !player.car) { pv.g.position.set(player.x, player.y, player.z); pv.g.rotation.y = player.a; if (pv.human) { pv.armed = true; pv.gunKind = ["pistol", "rifle", "shotgun"][player.weapon]; } const fwd = Math.sin(player.a) * player.vx + Math.cos(player.a) * player.vz, side = Math.cos(player.a) * player.vx - Math.sin(player.a) * player.vz; animPerson(pv, { strafe: Math.abs(side) > Math.abs(fwd), speed: player.speed, aiming: player.aimT > 0, pitch: -camPitch * 0.6 + 0.25, inAir: !player.onGround }, dt); }
+  const pv = player.v; if (pv && !player.car) { pv.g.position.set(player.x, player.y, player.z); pv.g.rotation.y = player.a; if (pv.human) { pv.armed = true; pv.gunKind = ["pistol", "rifle", "shotgun"][player.weapon]; } const fwd = Math.sin(player.a) * player.vx + Math.cos(player.a) * player.vz, side = Math.cos(player.a) * player.vx - Math.sin(player.a) * player.vz; animPerson(pv, { aimDir: camera.getWorldDirection(new THREE.Vector3()), strafe: Math.abs(side) > Math.abs(fwd), speed: player.speed, aiming: player.aimT > 0, pitch: -camPitch * 0.6 + 0.25, inAir: !player.onGround }, dt); }
   const cx0 = px(), cz0 = pz();
   for (const c of cars) c.mesh.g.visible = Math.abs(c.x - cx0) + Math.abs(c.z - cz0) < 210;
   for (const p of cops) { p.v.g.position.set(p.x, onPavement(p.x, p.z) ? 0.2 : 0, p.z); p.v.g.rotation.y = p.a; }
@@ -1186,8 +1231,8 @@ function swapPlayerModel() {
   if (player.v.human) disposeHuman(player.v); else scene.remove(player.v.g);
   player.v = makePerson({ kind: "player" }); player.v.g.visible = vis;
 }
-$("outfitBtn").addEventListener("click", openOutfits); $("wardBtn").addEventListener("click", openOutfits); $("outfitBtn2").addEventListener("click", () => { $("missions").hidden = true; openOutfits(); });
-$("outfitDone").addEventListener("click", () => { $("outfits").hidden = true; if (mode === "pause") mode = "play"; });
+$("setOutfit").addEventListener("click", () => { $("settings").hidden = true; openOutfits(); });
+$("outfitDone").addEventListener("click", () => { $("outfits").hidden = true; openSettings(); });
 // ---- settings screen
 function applyQuality() {
   const q = SET.quality, dpr = window.devicePixelRatio || 1;
@@ -1198,13 +1243,13 @@ function applyQuality() {
 function openSettings() {
   const seg = (id, v) => [...$(id).children].forEach((b) => b.classList.toggle("on", b.dataset.v === String(v)));
   $("sVol").value = SET.vol; $("sSens").value = SET.sens; $("sSteer").value = SET.steer;
-  seg("sDist", SET.camDist); seg("sQ", SET.quality); seg("sInv", SET.invY ? 1 : 0); seg("sPedal", SET.pedals ? 1 : 0);
+  seg("sDist", SET.camDist); seg("sQ", SET.quality); seg("sInv", SET.invY ? 1 : 0); seg("sDrive", SET.drive); seg("sTiltInv", SET.tiltInv ? 1 : 0); $("tiltRow").hidden = SET.drive !== "tilt";
   $("settings").hidden = false; if (mode === "play") mode = "pause"; document.exitPointerLock?.();
 }
 $("sVol").addEventListener("input", (e) => { SET.vol = +e.target.value; if (master) master.gain.value = SET.vol; saveSet(); });
 $("sSens").addEventListener("input", (e) => { SET.sens = +e.target.value; saveSet(); });
 $("sSteer").addEventListener("input", (e) => { SET.steer = +e.target.value; saveSet(); });
-for (const [id, fn] of [["sDist", (v) => (SET.camDist = +v)], ["sQ", (v) => { SET.quality = v; applyQuality(); }], ["sInv", (v) => (SET.invY = v === "1")], ["sPedal", (v) => (SET.pedals = v === "1")]])
+for (const [id, fn] of [["sDist", (v) => (SET.camDist = +v)], ["sQ", (v) => { SET.quality = v; applyQuality(); }], ["sInv", (v) => (SET.invY = v === "1")], ["sDrive", (v) => { SET.drive = v; SET.pedals = v !== "stick"; applyDriveMode(); $("tiltRow").hidden = v !== "tilt"; if (v === "tilt") askTilt(); }], ["sTiltInv", (v) => (SET.tiltInv = v === "1")]])
   $(id).addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; fn(b.dataset.v); saveSet(); [...$(id).children].forEach((x) => x.classList.toggle("on", x === b)); });
 $("setBtn").addEventListener("click", openSettings); $("setBtn2").addEventListener("click", openSettings);
 $("setDone").addEventListener("click", () => { $("settings").hidden = true; if (mode === "pause") mode = "play"; });
@@ -1260,6 +1305,7 @@ function frame(now) {
     if (!player.dead && player.hp < 100 && wanted.stars === 0) player.hp = Math.min(100, player.hp + dt * 2);
     toastT -= dt; if (toastT <= 0) $("toast").hidden = true; hintT -= dt; if (hintT <= 0) $("hint").hidden = true;
     hudT += dt; if (hudT > 0.25) { hudT = 0; updateHud(); }
+    if (!pedal.wheelHeld) pedal.wheel = lerp(pedal.wheel, 0, 1 - Math.exp(-dt * 6)); { const w = $("wheel"); if (w) w.style.transform = `rotate(${pedal.wheel}rad)`; }
     { const sp = $("speedo"); sp.hidden = !player.car; if (player.car) { const c = player.car, v = c.vx * Math.sin(c.a) + c.vz * Math.cos(c.a), kmh = Math.round(Math.abs(v) * 3.6); $("spdN").textContent = kmh; $("gearN").textContent = v < -0.5 ? "R" : kmh < 2 ? "N" : String(Math.min(6, 1 + Math.floor(kmh / 28))); } }
   } else if (mode === "title") { camYaw += dt * 0.08; }
   syncAll(dt); updateCamera(dt);
@@ -1269,4 +1315,4 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__g = { look: (x, z) => { camYaw = Math.atan2(x - px(), z - pz()); }, cops, renderer, scene, camera, THREE, HUM, makePerson, player, cars, peds, wanted, MISSIONS, startMission, SAVE, PLACES, frontOf, get mission() { return mission; }, enterCar, addWanted };
+window.__g = { setArm: (x) => (ARMOUT = x), shootNow: () => { player.fireT = 0; shoot(); }, look: (x, z) => { camYaw = Math.atan2(x - px(), z - pz()); }, cops, renderer, scene, camera, THREE, HUM, makePerson, player, cars, peds, wanted, MISSIONS, startMission, SAVE, PLACES, frontOf, get mission() { return mission; }, enterCar, addWanted };
