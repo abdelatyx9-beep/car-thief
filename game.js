@@ -379,7 +379,6 @@ function poseArms(v, aim, aimDir) {
   const a = v.g.rotation.y, fwd = _ax.set(Math.sin(a), 0, Math.cos(a));
   if (!aim) { // hang the arms a little away from the body so they never sink into wide clothes
     const side = _v3.set(fwd.z, 0, -fwd.x);
-    if (v.cur === "Idle" && B.spine) { _q1.setFromAxisAngle(side, Math.sin(performance.now() / 700 + (v.phase || 0)) * 0.018); rotWorld(B.spine, _q1.clone()); }
     if (ARMOUT || ARMFWD) for (const [k, s] of [["LArm", 1], ["RArm", -1]]) { _q1.setFromAxisAngle(fwd, s * ARMOUT); rotWorld(B[k], _q1.clone()); _q1.setFromAxisAngle(side, ARMFWD); rotWorld(B[k], _q1.clone()); }
     return;
   }
