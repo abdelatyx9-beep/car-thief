@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>سارق السيارات</title>
+<meta name="theme-color" content="#10131a">
+<meta name="description" content="سارق السيارات: مدينة مكعبات مفتوحة، اسرق السيارات، اهرب من الشرطة، وخلّص المهمات.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js","three/addons/":"./vendor/jsm/"}}</script>
+<style>
+:root { --ink: #10131a; --hot: #ffb21e; --hot2: #ff6a1e; --red: #ff3b3b; --blue: #2f8bff; --txt: #fff; --dim: rgba(255,255,255,.65); --panel: rgba(12,14,20,.72); --line: rgba(255,255,255,.16); --font: "Segoe UI", Tahoma, "Noto Sans Arabic", system-ui, sans-serif; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0d12; color: var(--txt); font-family: var(--font); touch-action: none; -webkit-user-select: none; user-select: none; }
+canvas#cv { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+.hud { position: fixed; inset: 0; pointer-events: none; }
+.hud[hidden], [hidden] { display: none !important; }
+/* top bar */
+.tl { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px)); }
+#mini { width: 150px; height: 150px; border-radius: 50%; border: 3px solid rgba(255,255,255,.85); background: #1c2230; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+.tr { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); text-align: right; display: grid; gap: 4px; justify-items: end; }
+.money { font-size: 30px; font-weight: 900; color: #7dff6a; text-shadow: 0 2px 0 #0a3a06, 0 0 10px rgba(0,0,0,.6); letter-spacing: 1px; direction: ltr; }
+.stars { font-size: 26px; letter-spacing: 2px; direction: ltr; text-shadow: 0 2px 4px rgba(0,0,0,.8); }
+.stars i { font-style: normal; color: rgba(255,255,255,.22); }
+.stars i.on { color: #ffd21e; }
+.stars.flash i.on { animation: fl .5s steps(2) infinite; }
+@keyframes fl { 50% { opacity: .25; } }
+.bars { width: 170px; display: grid; gap: 4px; }
+.bar { height: 9px; border-radius: 5px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.3); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #3fe07a, #b8ff5a); transition: width .2s; }
+.bar.arm i { background: linear-gradient(90deg, #4aa8ff, #9ad8ff); }
+.wep { font-size: 14px; font-weight: 800; background: var(--panel); border: 1px solid var(--line); padding: 4px 10px; border-radius: 10px; direction: rtl; }
+.obj { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); max-width: min(460px, 44vw); text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px 16px; font-size: 16px; font-weight: 700; line-height: 1.4; }
+.obj b { color: var(--hot); }
+.obj small { display: block; color: var(--dim); font-weight: 600; font-size: 12px; }
+.timer { color: #ff6a6a; font-weight: 900; } .obj .dist { color: #7fc8ff; font-weight: 900; white-space: nowrap; }
+.toast { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); font-size: 34px; font-weight: 900; text-align: center; text-shadow: 0 3px 0 #000, 0 0 18px rgba(0,0,0,.7); white-space: nowrap; }
+.toast small { display: block; font-size: 18px; color: #7dff6a; }
+.hint { position: absolute; bottom: 22%; left: 50%; transform: translateX(-50%); background: var(--panel); padding: 8px 14px; border-radius: 12px; font-size: 14px; border: 1px solid var(--line); }
+.cross { position: absolute; left: 50%; top: 45%; width: 22px; height: 22px; transform: translate(-50%, -50%); }
+.cross::before, .cross::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
+.cross::before { left: 10px; top: 0; width: 2px; height: 22px; } .cross::after { top: 10px; left: 0; height: 2px; width: 22px; }
+.hurt { position: absolute; inset: 0; box-shadow: inset 0 0 120px 30px rgba(255,0,0,.55); opacity: 0; transition: opacity .3s; }
+/* touch controls */
+.ctl { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%; border: 2px solid rgba(255,255,255,.45); background: rgba(15,18,26,.5); color: #fff; font-family: var(--font); font-weight: 900; display: grid; place-items: center; cursor: pointer; }
+.ctl.down { background: rgba(255,178,30,.55); border-color: var(--hot); }
+#joy { position: absolute; left: max(14px, env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: 160px; height: 160px; border-radius: 50%; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.3); pointer-events: auto; touch-action: none; }
+#joy i { position: absolute; left: 50%; top: 50%; width: 66px; height: 66px; margin: -33px 0 0 -33px; border-radius: 50%; background: rgba(255,255,255,.55); box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+#joyZone { position: absolute; left: 0; bottom: 0; width: 45%; height: 72%; pointer-events: auto; touch-action: none; }
+#joy { pointer-events: none !important; transition: opacity .2s; opacity: .55; } #joy.on { opacity: 1; }
+body:not(.touch) #joyZone { display: none; }
+#look { position: absolute; top: 0; bottom: 0; right: 0; width: 55%; pointer-events: auto; touch-action: none; }
+#fireBtn { right: max(26px, env(safe-area-inset-right, 0px)); bottom: calc(40px + env(safe-area-inset-bottom, 0px)); width: 96px; height: 96px; font-size: 20px; background: rgba(220,40,40,.6); border-color: #ff8a8a; }
+#actBtn { right: calc(max(26px, env(safe-area-inset-right, 0px)) + 112px); bottom: calc(30px + env(safe-area-inset-bottom, 0px)); width: 78px; height: 78px; font-size: 15px; background: rgba(255,178,30,.55); border-color: #ffd27a; }
+#jumpBtn { right: calc(max(26px, env(safe-area-inset-right, 0px)) + 18px); bottom: calc(150px + env(safe-area-inset-bottom, 0px)); width: 66px; height: 66px; font-size: 14px; }
+#wepBtn { right: calc(max(26px, env(safe-area-inset-right, 0px)) + 104px); bottom: calc(122px + env(safe-area-inset-bottom, 0px)); width: 58px; height: 58px; font-size: 12px; }
+#wardBtn { position: absolute; pointer-events: auto; top: calc(170px + env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 56px); width: 48px; height: 48px; border-radius: 12px; font-size: 22px; }
+.speedo { position: absolute; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 6px 16px; display: flex; align-items: baseline; gap: 6px; direction: rtl; }
+.speedo b { font-size: 30px; font-weight: 900; direction: ltr; } .speedo small { color: var(--dim); font-size: 12px; } .speedo i { font-style: normal; font-weight: 900; font-size: 18px; color: var(--hot); background: rgba(0,0,0,.4); border-radius: 8px; padding: 2px 8px; margin-inline-start: 6px; }
+#menuBtn { position: absolute; pointer-events: auto; top: calc(170px + env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px)); width: 48px; height: 48px; border-radius: 12px; font-size: 20px; }
+body:not(.touch) #joy, body:not(.touch) #look, body:not(.touch) .ctl.tch { display: none; }
+@media (max-height: 430px) { #mini { width: 112px; height: 112px; } #menuBtn { top: calc(130px + env(safe-area-inset-top, 0px)); } #wardBtn { top: calc(130px + env(safe-area-inset-top, 0px)); } #joy { width: 132px; height: 132px; } #fireBtn { width: 84px; height: 84px; bottom: 24px; } #actBtn { width: 68px; height: 68px; right: calc(max(26px, env(safe-area-inset-right, 0px)) + 100px); bottom: 18px; } #jumpBtn { bottom: 124px; } #wepBtn { bottom: 98px; right: calc(max(26px, env(safe-area-inset-right, 0px)) + 92px); } .money { font-size: 24px; } .stars { font-size: 20px; } .obj { font-size: 14px; } }
+/* screens */
+.screen { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 30%, rgba(30,36,54,.85), rgba(6,7,10,.95)); z-index: 5; padding: 16px; }
+.card { width: min(560px, 94vw); max-height: 92dvh; overflow: auto; background: rgba(18,21,30,.92); border: 1px solid var(--line); border-radius: 22px; padding: 22px; display: grid; gap: 14px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.logo { font-size: 46px; font-weight: 900; line-height: 1.05; letter-spacing: -1px; background: linear-gradient(180deg, #ffe27a, #ff8a1e 60%, #ff4a1e); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 4px 0 #3a1500); }
+.sub { color: var(--dim); font-size: 14px; }
+.btn { font-family: var(--font); font-weight: 900; font-size: 18px; padding: 14px 18px; border-radius: 14px; border: 0; cursor: pointer; background: linear-gradient(180deg, #ffc93e, #ff8a1e); color: #2a1400; box-shadow: 0 5px 0 #a24a00; }
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #a24a00; }
+.btn.ghost { background: rgba(255,255,255,.08); color: #fff; box-shadow: none; border: 1px solid var(--line); }
+.mlist { display: grid; gap: 8px; text-align: right; }
+.mitem { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--line); font-size: 14px; }
+.mitem b { font-size: 15px; } .mitem .st { margin-inline-start: auto; font-size: 13px; color: var(--dim); white-space: nowrap; }
+.mitem.done { opacity: .6; } .mitem.next { border-color: var(--hot); background: rgba(255,178,30,.1); }
+.keys { font-size: 12px; color: var(--dim); line-height: 1.7; }
+.row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .5s; z-index: 4; display: grid; place-items: center; font-size: 40px; font-weight: 900; }
+.fade.on { opacity: 1; }
+.rot { position: fixed; inset: 0; z-index: 9; background: #0b0d12; display: none; place-items: center; text-align: center; font-size: 20px; font-weight: 800; padding: 20px; }
+@media (orientation: portrait) and (pointer: coarse) { body.playing .rot { display: grid; } }
+.olist { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.oitem { font-family: var(--font); color: #fff; background: rgba(255,255,255,.05); border: 2px solid var(--line); border-radius: 14px; padding: 6px 4px 8px; display: grid; gap: 4px; justify-items: center; cursor: pointer; }
+.oitem img { width: 72px; height: 144px; object-fit: contain; }
+.oitem span { font-size: 12px; font-weight: 700; }
+.oitem.on { border-color: var(--hot); background: rgba(255,178,30,.14); }
+.oitem.wait { opacity: .5; }
+.credits { font-size: 12px; color: var(--dim); line-height: 1.8; text-align: right; }
+.credits b { color: #fff; }
+#setBtn { position: absolute; pointer-events: auto; top: calc(170px + env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 56px); width: 48px; height: 48px; border-radius: 12px; font-size: 22px; }
+.pedal { display: none; border-radius: 18px; }
+#gasBtn { right: max(26px, env(safe-area-inset-right, 0px)); bottom: calc(150px + env(safe-area-inset-bottom, 0px)); width: 92px; height: 110px; font-size: 18px; background: rgba(40,170,80,.55); border-color: #8affb0; }
+#brakeBtn { right: calc(max(26px, env(safe-area-inset-right, 0px)) + 108px); bottom: calc(150px + env(safe-area-inset-bottom, 0px)); width: 80px; height: 80px; font-size: 15px; background: rgba(200,60,40,.5); border-color: #ffb0a0; }
+body.touch.driving .pedal { display: grid; }
+.steer { display: none !important; }
+body.touch.driving.dm-buttons .steer.sb, body.touch.driving.dm-wheel .steer.sw, body.touch.driving.dm-tilt .steer.st { display: grid !important; }
+body.touch.driving.dm-buttons #joy, body.touch.driving.dm-wheel #joy, body.touch.driving.dm-tilt #joy, body.touch.driving.dm-buttons #joyZone, body.touch.driving.dm-wheel #joyZone, body.touch.driving.dm-tilt #joyZone { display: none; }
+#steerL, #steerR { bottom: calc(26px + env(safe-area-inset-bottom, 0px)); width: 104px; height: 104px; font-size: 38px; border-radius: 26px; }
+#steerL { left: max(18px, env(safe-area-inset-left, 0px)); } #steerR { left: calc(max(18px, env(safe-area-inset-left, 0px)) + 122px); }
+#wheel { position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: 190px; height: 190px; pointer-events: auto; touch-action: none; border-radius: 50%; background: rgba(15,18,26,.35); }
+#wheel svg { width: 100%; height: 100%; display: block; }
+.tilthint { position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); bottom: calc(30px + env(safe-area-inset-bottom, 0px)); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font-size: 13px; place-items: center; }
+@media (max-height: 430px) { #steerL, #steerR { width: 88px; height: 88px; } #steerR { left: calc(max(18px, env(safe-area-inset-left, 0px)) + 104px); } #wheel { width: 160px; height: 160px; } }
+body.driving #jumpBtn, body.driving #wepBtn { display: none; }
+body.driving #fireBtn { width: 78px; height: 78px; font-size: 16px; }
+.setrow { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; text-align: right; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--line); font-weight: 700; font-size: 14px; }
+.setrow input[type=range] { width: 160px; accent-color: #ffb21e; }
+.seg { display: flex; gap: 4px; } .seg button { font-family: var(--font); font-weight: 800; font-size: 13px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.06); color: #fff; cursor: pointer; } .seg button.on { background: #ffb21e; color: #2a1400; border-color: #ffb21e; }
+@media (max-height: 430px) { #setBtn { top: calc(130px + env(safe-area-inset-top, 0px)); } #gasBtn { bottom: 120px; height: 96px; } #brakeBtn { bottom: 120px; } }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div class="hud" id="hud" hidden>
+  <div class="hurt" id="hurt"></div>
+  <div class="tl"><canvas id="mini" width="300" height="300"></canvas></div>
+  <button class="ctl" id="menuBtn" type="button" aria-label="القائمة">☰</button>
+  <div class="speedo" id="speedo" hidden><b id="spdN">0</b><small>كم/س</small><i id="gearN">N</i></div>
+  <div class="tr">
+    <div class="money" id="money">$0</div>
+    <div class="stars" id="stars"><i>★</i><i>★</i><i>★</i><i>★</i><i>★</i></div>
+    <div class="bars"><div class="bar"><i id="hpBar"></i></div><div class="bar arm"><i id="armBar"></i></div></div>
+    <div class="wep" id="wep">قبضة</div>
+  </div>
+  <div class="obj" id="obj" hidden></div>
+  <div class="toast" id="toast" hidden></div>
+  <div class="hint" id="hint" hidden></div>
+  <div class="cross" id="cross"></div>
+  <div id="look"></div>
+  <div id="joyZone"></div>
+  <div id="joy"><i id="joyK"></i></div>
+  <button class="ctl tch" id="fireBtn" type="button">نار</button>
+  <button class="ctl tch" id="actBtn" type="button" hidden>سرقة</button>
+  <button class="ctl tch" id="jumpBtn" type="button">قفز</button>
+  <button class="ctl tch" id="wepBtn" type="button">سلاح</button>
+  <button class="ctl tch steer sb" id="steerL" type="button">◀</button>
+  <button class="ctl tch steer sb" id="steerR" type="button">▶</button>
+  <div class="steer sw" id="wheel"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="9"/><circle cx="50" cy="50" r="11" fill="rgba(255,255,255,.85)"/><path d="M8 52 L39 52 M61 52 L92 52 M50 61 L50 92" stroke="rgba(255,255,255,.85)" stroke-width="8" stroke-linecap="round"/><circle cx="50" cy="9" r="5" fill="#ffb21e"/></svg></div>
+  <div class="steer st tilthint" id="tiltHint">📱 ميّل الجوال يمين ويسار</div>
+  <button class="ctl tch pedal" id="gasBtn" type="button">بنزين</button>
+  <button class="ctl tch pedal" id="brakeBtn" type="button">فرامل</button>
+  <button class="ctl" id="setBtn" type="button" aria-label="الإعدادات">⚙️</button>
+</div>
+
+<div class="screen" id="title">
+  <div class="card">
+    <div class="logo">سارق<br>السيارات</div>
+    <div class="sub">مدينة مفتوحة كاملة: اسرق السيارات، اهرب من الشرطة، وخلّص مهمات الزعيم</div>
+    <button class="btn" id="playBtn" type="button">ابدأ اللعب ▶</button>
+    <div class="row"><button class="btn ghost" id="missBtn" type="button">المهمات</button></div>
+    <div class="row"><button class="btn ghost" id="setBtn2" type="button" style="font-size:14px;padding:10px 14px">الإعدادات ⚙️</button><button class="btn ghost" id="creditsBtn" type="button" style="font-size:14px;padding:10px 14px">الحقوق</button></div>
+    <div class="keys" id="keys">الكمبيوتر: WASD للحركة، الماوس للنظر، كليك نار، F سرقة/نزول، Space قفز/فرامل يد، Q تغيير السلاح، M المهمات</div>
+  </div>
+</div>
+<div class="screen" id="missions" hidden>
+  <div class="card">
+    <div class="logo" style="font-size:30px">المهمات</div>
+    <div class="sub">روح لعلامة <b style="color:#ffb21e">M</b> الصفراء على الخريطة عشان تبدأ المهمة</div>
+    <div class="mlist" id="mlist"></div>
+    <div class="row"><button class="btn" id="resumeBtn" type="button">كمّل اللعب</button><button class="btn ghost" id="soundBtn" type="button">الصوت: شغّال</button></div>
+  </div>
+</div>
+<div class="screen" id="outfits" hidden>
+  <div class="card">
+    <div class="logo" style="font-size:30px">الملابس</div>
+    <div class="sub">اختار شكل شخصيتك</div>
+    <div class="olist" id="olist"></div>
+    <button class="btn" id="outfitDone" type="button">تمام</button>
+  </div>
+</div>
+<div class="screen" id="credits" hidden>
+  <div class="card">
+    <div class="logo" style="font-size:30px">الحقوق</div>
+    <div class="credits">
+      <b>الشخصيات:</b> Microsoft Rocketbox Avatar Library – رخصة MIT (© Microsoft Corporation).<br>
+      <b>السيارات:</b> "Generic passenger car pack" و "Generic civil service vehicles pack" من comrade1280 على Sketchfab – رخصة CC BY 4.0.<br>
+      <b>الحركات:</b> Mixamo (Adobe).<br>
+      <b>محرك الرسم:</b> three.js – رخصة MIT.<br>
+      المدينة والمهمات والأصوات مصنوعة خصيصاً لهذه اللعبة.
+    </div>
+    <button class="btn" id="creditsDone" type="button">رجوع</button>
+  </div>
+</div>
+<div class="screen" id="settings" hidden>
+  <div class="card">
+    <div class="logo" style="font-size:30px">الإعدادات</div>
+    <div class="setrow"><span>علو الصوت</span><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
+    <div class="setrow"><span>سرعة لف الكاميرا</span><input type="range" id="sSens" min="0.4" max="2" step="0.1"></div>
+    <div class="setrow"><span>بُعد الكاميرا</span><div class="seg" id="sDist"><button data-v="0.8">قريب</button><button data-v="1">وسط</button><button data-v="1.25">بعيد</button></div></div>
+    <div class="setrow"><span>حساسية الدركسون</span><input type="range" id="sSteer" min="0.5" max="1.6" step="0.1"></div>
+    <div class="setrow"><span>الملابس</span><button class="btn ghost" id="setOutfit" type="button" style="font-size:14px;padding:8px 14px">اختار لبسك 👕</button></div>
+    <div class="setrow"><span>تحكم السيارة في الجوال</span><div class="seg" id="sDrive"><button data-v="buttons">أسهم</button><button data-v="wheel">دركسون</button><button data-v="tilt">إمالة الجوال</button><button data-v="stick">العصا</button></div></div>
+    <div class="setrow" id="tiltRow"><span>عكس اتجاه الإمالة</span><div class="seg" id="sTiltInv"><button data-v="0">لا</button><button data-v="1">نعم</button></div></div>
+    <div class="setrow"><span>جودة الرسم</span><div class="seg" id="sQ"><button data-v="low">خفيفة</button><button data-v="med">متوسطة</button><button data-v="high">عالية</button></div></div>
+    <div class="setrow"><span>عكس الكاميرا فوق/تحت</span><div class="seg" id="sInv"><button data-v="0">لا</button><button data-v="1">نعم</button></div></div>
+    <button class="btn" id="setDone" type="button">تمام</button>
+  </div>
+</div>
+<div class="fade" id="fade"></div>
+<div class="rot">لف الجوال بالعرض 📱↔️</div>
+<script type="module" src="game.js"></script>
+<script>if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js");</script>
+</body>
+</html>
